@@ -189,7 +189,7 @@ function showCaption(d, i) {
       }
       liste += '</ol>Abstention: <span class="colorspan" style="background-color:' + abstentionScale(depRow['Abstention']) + ';"></span>' + depRow['Abstention'] + '%' + statut + '.';
     }else{
-      liste = 'En attente du dépouillement (dernière mise à jour: 23h57).'
+      liste = 'En attente du dépouillement (dernière mise à jour: lundi 0h54).'
     }
     d3.select('#motherTip').html('<h3 class="statename">' + d.id + ' – ' + resultById[selectedRound].get(d.id).title + "</h3>" + liste + "</span>");
 }
@@ -229,8 +229,8 @@ var abstentionScale =  d3.scaleLinear()
   .range(['#e2e2e2', 'black']);
 
 d3.queue()
-  .defer(d3.json, "http://files.newsnetz.ch/upload//1/2/121716.json") // geodonnees departements
-  .defer(d3.csv, "http://files.newsnetz.ch/upload//1/2/121754.csv?2356", function(d){ // data tour 2
+  .defer(d3.json, "departements.json") // geodonnees departements
+  .defer(d3.csv, "data-t2.csv", function(d){ // data tour 2
     resultById[selectedRound].set(d.id, d);
   })
   .await(ready);
@@ -323,7 +323,7 @@ function changeRound(roundStr){
 
   if(resultById[selectedRound].empty()){
     console.log('Loading 1st round...')
-    d3.csv("http://files.newsnetz.ch/upload//1/2/121710.csv", function(d) { // donnees tour 1
+    d3.csv("data-t1.csv", function(d) { // donnees tour 1
       resultById[selectedRound].set(d.id, d);
     }, updateMap);
   }else{
