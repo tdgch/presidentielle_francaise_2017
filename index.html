@@ -1,0 +1,416 @@
+
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Résultats et abstention aux deux tours de la présidentielle française</title>
+<meta property="og:image" content="http://web.tcch.ch/2etour_draft/preview.jpg" />
+<style>
+*{
+  margin: 0;
+  padding: 0;
+}
+body{
+  font-family: "Open Sans", sans-serif;
+}
+.departements {
+  stroke: #eee;
+}
+#motherTip ol{
+  font-size: .9em;
+  padding-left: 10px;
+  margin: .4em;
+}
+h3.statename{
+  margin: 0;
+}
+h3 span.el_votes{
+  font-weight: normal;
+}
+span.politician{
+  font-weight: bold;
+}
+span.colorspan{
+  width: 11px;
+  height: 11px;
+  margin-right: 2px;
+  display: inline-block;
+  background-color: #bbb;
+}
+
+svg{
+  float: left;
+}
+svg#legend{
+/*  float: none;*/
+}
+#rightPanel{
+  float: left;
+  margin-top: 20px;
+  margin-left: -30px;
+}
+#motherTip{
+  background-color: #fff;
+  margin: 30px 0 30px -20px;
+  padding: 10px 2px 0 5px;
+  border: 2px solid #444;
+  border-radius: 5px;
+  min-height: 90px;
+  width: 260px;
+}
+#credits{
+  font-size: .9em;
+  margin-top: 30px;
+  margin-left: 40px;
+  text-align: right;
+  width: 200px;
+}
+@media screen and (max-width: 768px) {
+  #rightPanel{
+    width: 100%;
+    /*width: 95vw !important;*/
+    margin: auto;
+    margin-top: 0;
+  }
+  #rightPanel div{
+    margin: 5px auto;
+    width: 96%;
+  }
+  #motherTip{
+    float: right;
+  }
+  #credits{
+    clear: left;
+  }
+}
+
+
+</style>
+<body>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.24.0/d3-legend.js"></script>
+<script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+
+<div id="map"></div>
+
+<section id="rightPanel">
+  <div id="motherTip">
+    Survolez ou touchez un département pour plus de détails.
+  </div>
+
+  <div class="form-group">
+    <input type="radio" class="form-control" name="tour" id="1st" onclick="changeRound('t1');">
+    <label for="1st">Premier tour</label>
+  </div>
+  <div class="form-group">
+    <input type="radio" class="form-control" name="tour" id="2nd" checked onclick="changeRound('t2');">
+    <label for="2nd">Second tour</label>
+  </div>
+
+  <div class="form-group">
+    <label for="sel1">Montrer:</label>
+    <select class="form-control" id="montrer" onchange="if(this.selectedIndex == 1){
+      showAbstention = true;
+      switchLegend('.legendOrdinal', '.legendGreyscale');
+    }else{
+      showAbstention = false;
+      switchLegend('.legendGreyscale', '.legendOrdinal');
+    }
+    changeMap();">
+      <option>Les résultats par candidat</option>
+      <option>L’abstention</option>
+    </select>
+  </div>
+
+  <div ><svg id="mapLegend" width="200" height="104"></svg></div>
+  <div id="credits">Données: <a href="http://elections.interieur.gouv.fr/">Ministère de l’Intérieur</a> — Moteur: <a href="https://d3js.org/">D3.js</a> — Programmation: Paul Ronga<br /><!--Code: disponible sur: ...--></div>
+
+</section>
+
+<script>
+
+/* Sorry if it's a bit messy, I was in a rush
+— Paul */
+
+var width = 570,
+    height = 520;
+
+var baseScale = 3000, translateX = 280, translateY = 268;
+
+var windowWidth = $( window ).width();
+if (windowWidth < 600){
+  // resize
+  width = windowWidth - 20;
+  ratio = width / 600;
+  console.log("Width is " + windowWidth + " -> resize to ratio " + ratio);
+  height *= ratio;
+  baseScale *= ratio;
+  translateX *= ratio;
+  translateY *= ratio;
+
+  // here you should use a code to resize your iframe – I can't share ours, sorry!
+  // someFunction() {
+  //      return height + 350;
+  //  });
+}
+
+var resultById = {'t1': d3.map(), 't2': d3.map()};
+
+var selectedRound = 't2';
+var showAbstention = false;
+
+var colors = {
+    'Macron': 'orange',
+    'Le Pen': '#110c4e',
+    'Fillon': '#536797',
+    'Mélenchon': '#e80007',
+    'Hamon': '#c93d7c'
+}
+
+var list_keys = ["Nom", "Prenom", "Score",
+"Nom_1", "Prenom_1", "Score_1",
+"Nom_2", "Prenom_2", "Score_2",
+"Nom_3", "Prenom_3", "Score_3",
+"Nom_4", "Prenom_4", "Score_4",
+"Nom_5", "Prenom_5", "Score_5"];
+
+/* Tooltip */
+function showCaption(d, i) {
+    var depRow = resultById[selectedRound].get(d.id);
+    if(depRow && depRow.Nom){
+      var liste = '<ol><li><span class="colorspan first" style="background-color:' + colors[depRow.Nom] + ';"></span>' + depRow.Prenom + ' ' + depRow.Nom + ': ' + depRow.Score + '%</li>';
+      var limit = 15, statut = '';
+      if(selectedRound == 't2'){
+        limit = 6;
+        statut = ' – ' + depRow.Statut;
+      }
+      for(i = 3; i < limit; i+=3){
+          liste += '<li><span class="colorspan" style="background-color:' + colors[ depRow[list_keys[i]] ] + ';"></span>' + depRow[list_keys[i+1]] + ' ' + depRow[list_keys[i]] + ': ' + depRow[list_keys[i+2]] + '%</li>';
+      }
+      liste += '</ol>Abstention: <span class="colorspan" style="background-color:' + abstentionScale(depRow['Abstention']) + ';"></span>' + depRow['Abstention'] + '%' + statut + '.';
+    }else{
+      liste = 'En attente du dépouillement (dernière mise à jour: 23h57).'
+    }
+    d3.select('#motherTip').html('<h3 class="statename">' + d.id + ' – ' + resultById[selectedRound].get(d.id).title + "</h3>" + liste + "</span>");
+}
+/* End tooltip */
+
+/*
+Note: great project for multiple projections:
+https://github.com/rveciana/d3-composite-projections
+var projection = d3.geoConicConformalFrance();
+*/
+
+var projection = d3.geoConicConformal()
+    .center([2.454071, 46.279229])
+    .scale(baseScale)
+    .translate([translateX, translateY]);
+
+var path = d3.geoPath()
+    .projection(projection);
+
+var svg = d3.select("#map").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+var colorScales2ndRound = {
+  'Macron': d3.scaleLinear()
+    .domain([20, 65])
+    .range(['#fff', 'orange']),
+  'Le Pen': d3.scaleLinear()
+    .domain([10, 65])
+    .range(['#fff', '#110c4e'])
+}
+
+
+
+var abstentionScale =  d3.scaleLinear()
+  .domain([15, 30])
+  .range(['#e2e2e2', 'black']);
+
+d3.queue()
+  .defer(d3.json, "http://files.newsnetz.ch/upload//1/2/121716.json") // geodonnees departements
+  .defer(d3.csv, "http://files.newsnetz.ch/upload//1/2/121754.csv?2356", function(d){ // data tour 2
+    resultById[selectedRound].set(d.id, d);
+  })
+  .await(ready);
+
+function ready(error, france, data) {
+  if (error){
+    console.log('Error:' + error);
+    throw error;
+  }
+
+  var france = topojson.feature(france, france.objects.departements);
+    svg.selectAll(".departements")
+      .data(france.features)
+      .enter()
+      .append("path")
+      .attr("d", path)
+      .attr("fill", function(d) {
+        d.id = d.properties.code_insee;
+        try{
+          if(d.id != '2A' && d.id != '2B')
+            d.id = parseInt(d.id);
+        }
+        catch(err) {
+          console.log('Could not parse as int ' + d.properties.code_insee)
+        }
+        var stateRow = resultById[selectedRound].get(d.id)
+
+        if (stateRow){
+          if(showAbstention){
+            if(stateRow.Abstention){
+              return abstentionScale(stateRow.Abstention);
+            }else{
+              return 'none';
+            }
+          }else{
+            if(stateRow.Nom){
+              if(selectedRound == 't2'){
+                return colorScales2ndRound[stateRow.Nom](stateRow.Score);
+              }
+              return colors[stateRow.Nom];
+            } else {
+              return '#bbb';
+            }
+          }
+        }else{
+          console.log('No matching row for ' + d.properties.nom + ' | ' + d.properties.code_insee)
+        }
+        return '#bbb';
+      })
+      .attr("class", "departements")
+      .on('mouseover', showCaption);
+}
+
+/* Change from 1st to 2nd round */
+function changeRound(roundStr){
+  selectedRound = roundStr;
+
+  // nested function
+  function updateMap(){
+    toggleCandidates();
+
+    svg.selectAll(".departements")
+    .transition().duration(200)
+    .style("fill", function(d) {
+      var stateRow = resultById[selectedRound].get(d.id)
+      if (stateRow){
+        if(showAbstention){
+          if(stateRow.Abstention){
+            return abstentionScale(stateRow.Abstention);
+          }else{
+            return 'none';
+          }
+        }else{
+          if(stateRow.Nom){
+            if(selectedRound == 't2'){
+              return colorScales2ndRound[stateRow.Nom](stateRow.Score);
+            }
+            return colors[stateRow.Nom];
+          } else {
+            return '#bbb';
+          }
+        }
+      }else{
+        console.log('No matching row for ' + d.properties.nom + ' | ' + d.properties.code_insee)
+      }
+      return 'grey';
+    });
+  }
+  // end nested func
+
+  if(resultById[selectedRound].empty()){
+    console.log('Loading 1st round...')
+    d3.csv("http://files.newsnetz.ch/upload//1/2/121710.csv", function(d) { // donnees tour 1
+      resultById[selectedRound].set(d.id, d);
+    }, updateMap);
+  }else{
+    updateMap();
+  }
+}
+
+/* Switch from candidates to abstention */
+function changeMap(){
+  svg.selectAll(".departements")
+    .transition().duration(200)
+    .style("fill", function(d) {
+        var stateRow = resultById[selectedRound].get(d.id);
+        if(!stateRow){
+          console.log('problem with id ' + d.id)
+          return 'none';
+        }
+        if(showAbstention){
+          return abstentionScale(stateRow.Abstention);
+        }
+      if (stateRow){
+        return colors[stateRow.Nom];
+      }else{
+        console.log('No matching row for ' + d.properties.nom + ' | ' + d.properties.code_insee)
+      }
+      return 'grey';
+    });
+}
+
+/* Legends */
+
+var ordinal = d3.scaleOrdinal()
+  .domain(["Emmanuel Macron", "Marine Le Pen", "François Fillon", "Jean-Luc Mélenchon", "Benoît Hamon"])
+  .range(['orange', '#110c4e', '#536797', '#e80007', '#c93d7c']);
+
+var mapLegend = d3.select("#mapLegend");
+
+mapLegend.append("g")
+  .attr("class", "legendOrdinal");
+
+var legendOrdinal = d3.legendColor()
+  .shapePadding(2)
+  .scale(ordinal);
+
+function toggleCandidates(){
+  if(selectedRound == 't1'){
+    legendOrdinal.cellFilter(function(d){ return d.label; });
+  }else{
+    legendOrdinal.cellFilter(function(d){
+      if(selectedRound == 't2'){
+        return d.label.substr(0,3) == "Mar" || d.label.substr(0,3) == "Emm"
+      }else{
+        return d.label;
+      }
+    });
+  }
+  mapLegend.select(".legendOrdinal")
+    .call(legendOrdinal);
+}
+toggleCandidates();
+
+
+var legendGreyscale = d3.legendColor()
+  .cells(4)
+  .labelFormat(function(d) { return d + "% d’abstention"; })
+  .shapePadding(2)
+  .scale(abstentionScale);
+
+mapLegend.append("g")
+  .attr("class", "legendGreyscale")
+  .style('opacity', '0');
+
+mapLegend.select(".legendGreyscale")
+  .call(legendGreyscale);
+
+
+function switchLegend(hideClassName, showClassName){
+  mapLegend.select( hideClassName )
+    .transition().duration(200)
+    .style('opacity', 0);
+  mapLegend.select( showClassName )
+    .transition().duration(200)
+    .style('opacity', 1);
+}
+/* End legends */
+
+</script>
+
+</body>
+</html>
