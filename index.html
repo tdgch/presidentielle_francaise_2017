@@ -182,7 +182,8 @@ function showCaption(d, i) {
       var limit = 15, statut = '';
       if(selectedRound == 't2'){
         limit = 6;
-        statut = ' – ' + depRow.Statut;
+        statut = ', votes blancs: ' + depRow['Blancs'] + '%';
+        statut += ' – ' + depRow.Statut;
       }
       for(i = 3; i < limit; i+=3){
           liste += '<li><span class="colorspan" style="background-color:' + colors[ depRow[list_keys[i]] ] + ';"></span>' + depRow[list_keys[i+1]] + ' ' + depRow[list_keys[i]] + ': ' + depRow[list_keys[i+2]] + '%</li>';
@@ -225,7 +226,7 @@ var colorScales2ndRound = {
 
 
 var abstentionScale =  d3.scaleLinear()
-  .domain([15, 30])
+  .domain([15, 35])
   .range(['#e2e2e2', 'black']);
 
 d3.queue()
@@ -345,6 +346,9 @@ function changeMap(){
           return abstentionScale(stateRow.Abstention);
         }
       if (stateRow){
+        if(selectedRound == 't2'){
+          return colorScales2ndRound[stateRow.Nom](stateRow.Score);
+        }
         return colors[stateRow.Nom];
       }else{
         console.log('No matching row for ' + d.properties.nom + ' | ' + d.properties.code_insee)
@@ -387,7 +391,7 @@ toggleCandidates();
 
 
 var legendGreyscale = d3.legendColor()
-  .cells(4)
+  .cells(5)
   .labelFormat(function(d) { return d + "% d’abstention"; })
   .shapePadding(2)
   .scale(abstentionScale);
